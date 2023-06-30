@@ -1,0 +1,13 @@
+---
+layout: post
+title:  "mysql架构"
+date:   2023-06-30 22:13:26 +0800
+categories: jekyll update
+---
+# mysql组成的部分
+1. 连接池组件
+2. 缓存
+3. 分析器
+4. 优化器
+5. 执行器(存储引擎)
+6. 物理文件
