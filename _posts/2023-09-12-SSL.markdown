@@ -1,5 +1,4 @@
 ---
-layout: single
 title:  "TSL"
 date:   2023-09-12 11:08:26 +0800
 categories: Ssl

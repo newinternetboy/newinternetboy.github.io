@@ -72,3 +72,9 @@ compress_html:
 
 paginate: 2
 paginate_path: /page:num/
+
+# 本地化语言设置为中文
+locale: zh
+
+# 使用utf-8编码
+encoding: "utf-8"

@@ -1,7 +1,8 @@
 ---
 title: "《忆秦娥·娄山关》"
-layout: single
 date: 2023-11-07 19:58:19 +0800
+category: 教员诗词
+cetegories: 教员诗词
 ---
 		《忆秦娥·娄山关》
 			毛泽东
