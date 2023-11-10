@@ -49,6 +49,12 @@ breadcrumb_separator  : "/"
 #   - vendor/gems/
 #   - vendor/ruby/
 #
+# 归档
+collections:
+  year-archive:
+    output: true
+    permalink: /:collection/:path/
+
 defaults:
   # _posts
   - scope:
@@ -61,6 +67,13 @@ defaults:
       comments: true
       share: true
       related: true
+  # _pages
+  - scope:
+      path: ""
+      type: pages
+    values:
+      layout: single
+
 
 
 # hltm压缩(开发环境忽略)
@@ -78,3 +91,5 @@ locale: zh
 
 # 使用utf-8编码
 encoding: "utf-8"
+
+include: ["_pages"]
