@@ -1,0 +1,269 @@
+---
+title:  "golang json.Unmarshal使用注意事项"
+date:   2023-12-01 11:20:00 +0800
+categories: golang
+---
+# 前言
+日常开发过程中，最多使用json.Encoder()进行json字符串的反序列化，其中的底层实现笔者掌握的还不够。
+源码对应的golang版本(go version go1.19 linux/amd64)
+
+# What
+```golang
+package learnjson
+
+import (
+	"bytes"
+	"encoding/json"
+	"testing"
+
+	. "github.com/smartystreets/goconvey/convey"
+)
+
+func TestDecode(t *testing.T) {
+	Convey("TestDecode", t, func() {
+		demoStr := `1 辈子流浪的游子是否曾期待过归宿？`
+		var raw interface{}
+		decoder := json.NewDecoder(bytes.NewBuffer([]byte(demoStr)))
+		decoder.UseNumber()
+		err := decoder.Decode(&raw)
+        fmt.Printf("raw=%v\n", raw)
+		So(err, ShouldNotBeNil)
+	})
+}
+```
+输出
+```bash
+=== RUN   TestDecode
+  TestDecode raw=1 ✘
+Failures:
+  Expected '<nil>' to NOT be nil (but it was)!
+```
+按之前的认知，因为demoStr不是json串，执行Decode后应该会返回错误。实际上并没有返回错误且输出的反序列化结果为raw=1，为什么？
+
+# Why
+先看一下Decoder的结构及其重要字段释义
+```golang
+// A Decoder reads and decodes JSON values from an input stream.
+type Decoder struct {
+	r       io.Reader //待解析数据流
+	buf     []byte
+	d       decodeState //反序列化状态
+	scanp   int   //buf中未读取数据开始下标 
+	scanned int64 //已经被扫描的字节数量
+	scan    scanner //扫描器
+	err     error //反序列化错误
+
+	tokenState int
+	tokenStack []int
+}
+```
+Decode源码
+```golang
+func (dec *Decoder) Decode(v any) error {
+	if dec.err != nil {
+		return dec.err
+	}
+
+	if err := dec.tokenPrepareForDecode(); err != nil {
+		return err
+	}
+
+	if !dec.tokenValueAllowed() {
+		return &SyntaxError{msg: "not at beginning of value", Offset: dec.InputOffset()}
+	}
+
+	// Read whole value into buffer.
+	n, err := dec.readValue()
+	if err != nil {
+		return err
+	}
+	dec.d.init(dec.buf[dec.scanp : dec.scanp+n])
+	dec.scanp += n
+
+	// Don't save err from unmarshal into dec.err:
+	// the connection is still usable since we read a complete JSON
+	// object from it before the error happened.
+	err = dec.d.unmarshal(v)
+
+	// fixup token streaming state
+	dec.tokenValueEnd()
+
+	return err
+}
+```
+1. 检测decode.err报错后终止
+2. tokenPrepareForDecode()，检测tokenState是否是数组元素或者键值对，如果是,判断下一位待读取的字符是否是逗号，冒号,如果不是则直接返回错误,是的话更新tokenState为tokenArrayValue、tokenObjectValue,并将读取下标+1.
+```golang
+func (dec *Decoder) tokenPrepareForDecode() error {
+	// Note: Not calling peek before switch, to avoid
+	// putting peek into the standard Decode path.
+	// peek is only called when using the Token API.
+	switch dec.tokenState {
+	case tokenArrayComma:
+		c, err := dec.peek()
+		if err != nil {
+			return err
+		}
+		if c != ',' {
+			return &SyntaxError{"expected comma after array element", dec.InputOffset()}
+		}
+		dec.scanp++
+		dec.tokenState = tokenArrayValue
+	case tokenObjectColon:
+		c, err := dec.peek()
+		if err != nil {
+			return err
+		}
+		if c != ':' {
+			return &SyntaxError{"expected colon after object key", dec.InputOffset()}
+		}
+		dec.scanp++
+		dec.tokenState = tokenObjectValue
+	}
+	return nil
+}
+```
+3. 校验tokenValue是否合法，允许的tokenValue只有tokenTopValue, tokenArrayStart, tokenArrayValue, tokenObjectValue四种。
+4. 重点看下readValue()函数,最终返回的是有效内容的长度。
+```golang
+func (dec *Decoder) readValue() (int, error) {
+    //重置scanner
+    dec.scan.reset()
+
+	scanp := dec.scanp
+	var err error
+Input:
+    //读取数据下标必须>=0
+	for scanp >= 0 {
+
+		// Look in the buffer for a new value.
+		for ; scanp < len(dec.buf); scanp++ {
+			c := dec.buf[scanp]
+			dec.scan.bytes++
+			switch dec.scan.step(&dec.scan, c) {
+			case scanEnd:
+				// scanEnd is delayed one byte so we decrement
+				// the scanner bytes count by 1 to ensure that
+				// this value is correct in the next call of Decode.
+				dec.scan.bytes--
+				break Input
+			case scanEndObject, scanEndArray:
+				// scanEnd is delayed one byte.
+				// We might block trying to get that byte from src,
+				// so instead invent a space byte.
+				if stateEndValue(&dec.scan, ' ') == scanEnd {
+					scanp++
+					break Input
+				}
+			case scanError:
+				dec.err = dec.scan.err
+				return 0, dec.scan.err
+			}
+		}
+
+		// Did the last read have an error?
+		// Delayed until now to allow buffer scan.
+		if err != nil {
+			if err == io.EOF {
+				if dec.scan.step(&dec.scan, ' ') == scanEnd {
+					break Input
+				}
+				if nonSpace(dec.buf) {
+					err = io.ErrUnexpectedEOF
+				}
+			}
+			dec.err = err
+			return 0, err
+		}
+
+		n := scanp - dec.scanp
+		err = dec.refill()
+		scanp = dec.scanp + n
+	}
+	return scanp - dec.scanp, nil
+}
+```
+
+dec.scan.reset(),初始化scanner的step为stateBeginValue,scanner的step是用于扫描字符及下一个字符执行的操作。
+
+step种类
+* stateBeginStringOrEmpty,读取字符`{`后进行的操作
+* stateBeginValueOrEmpty,字符`[`后进行的操作
+* stateInString,读取到`"`字符后进行的操作
+* stateInStringEsc,读取到`"\`字符后进行的操作
+* stateNeg,读取到`-`后进行的操作
+* state0,读取到`0`进行的操作,最终是为了解析出数值(可以是科学计数法标识的)
+* stateT,读取到`t`进行的操作,最终是要解析出True
+* stateF,读取到`f`进行的操作,最终是要解析出false
+* stateN,读取到`n`进行的操作,最终是为了判断null值
+* state1,读取到`1-9`进行的操作,最终是为了提取数字
+```golang
+func (s *scanner) reset() {
+	s.step = stateBeginValue
+	s.parseState = s.parseState[0:0]
+	s.err = nil
+	s.endTop = false
+}
+```
+stateBeginValue(),会判断传入c的类别，主要分为对象{、[、"、-、0、t、f、n、1~9来决定后续使用哪种step来解析.
+```golang
+func stateBeginValue(s *scanner, c byte) int {
+	if isSpace(c) {
+		return scanSkipSpace
+	}
+	switch c {
+	case '{':
+		s.step = stateBeginStringOrEmpty
+		return s.pushParseState(c, parseObjectKey, scanBeginObject)
+	case '[':
+		s.step = stateBeginValueOrEmpty
+		return s.pushParseState(c, parseArrayValue, scanBeginArray)
+	case '"':
+		s.step = stateInString
+		return scanBeginLiteral
+	case '-':
+		s.step = stateNeg
+		return scanBeginLiteral
+	case '0': // beginning of 0.123
+		s.step = state0
+		return scanBeginLiteral
+	case 't': // beginning of true
+		s.step = stateT
+		return scanBeginLiteral
+	case 'f': // beginning of false
+		s.step = stateF
+		return scanBeginLiteral
+	case 'n': // beginning of null
+		s.step = stateN
+		return scanBeginLiteral
+	}
+	if '1' <= c && c <= '9' { // beginning of 1234.5
+		s.step = state1
+		return scanBeginLiteral
+	}
+	return s.error(c, "looking for beginning of value")
+}
+```
+5. 根据有效长度n初始化decoder.decodeState.data的内容为dec.buf[dec.scanp : dec.scanp+n]
+6. decoder扫描下标+n
+7. 调用decodeSate.unmarshal反序列化
+8. 设置tokenState
+
+根据上述代码可知，`1 辈子流浪的游子是否曾期待过归宿？`通过json.Decoder会按照数字解析出来,最终得到`raw=1`的结果
+# How
+笔者想要的效果是通过反序列化成功与否，判断值是否是json字符串.
+json.Unmarshal附带了checkValid函数，校验字符串是否是json编码的数据，可以直接使用.
+```golang
+	str := "7e+0"
+	var raw interface{}
+	err := json.Unmarshal([]byte(str), &raw)
+	if err != nil {
+		fmt.Println("not json")
+	} else {
+		fmt.Println("is json")
+	}
+```
+
+# Final
+json.Decoder可以反序列化多种数据类型，包含数字、字符串、对象、数组。
+如果只需要进行json字符串反序列话，直接使用json.Unmarshal。
