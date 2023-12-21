@@ -28,3 +28,12 @@ main:
   - title: "年度归档"
     url: /year-archive/
 ```
+
+# 如何设置博客头图
+```
+---
+header:
+  image: /assets/images/page-header-image.png
+  og_image: /assets/images/page-header-og-image.png
+---
+```
