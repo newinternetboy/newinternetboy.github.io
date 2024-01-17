@@ -3,6 +3,9 @@ title:  "mysql基础架构"
 date:   2023-06-30 22:13:26 +0800
 categories: mysql
 ---
+[mysql常见术语](https://dev.mysql.com/doc/refman/5.7/en/glossary.html#glos_redo_log)
+
+
 ![](/assets/img/mysql.jpg)
 1. 连接池组件
 2. 缓存
@@ -10,3 +13,5 @@ categories: mysql
 4. 优化器
 5. 执行器(存储引擎)
 6. 物理文件
+
+
