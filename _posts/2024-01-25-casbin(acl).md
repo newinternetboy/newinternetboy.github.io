@@ -13,6 +13,8 @@ Casbin是一个功能强大、高效、开源的权限控制实现方案
 
 
 # 参考资料
-1. [casbin golang](https://github.com/casbin/casbin?tab=readme-ov-file#tutorials)
-2. [RBAC API](https://casbin.org/docs/rbac-api/)
-3. https://casbin.org/docs/adapters/
+1. [casbin](https://casbin.org/zh/docs/overview)
+2. [casbin golang](https://github.com/casbin/casbin?tab=readme-ov-file#tutorials)
+3. [RBAC API](https://casbin.org/docs/rbac-api/)
+4. https://casbin.org/docs/adapters/
+5. [casbin blog](https://www.cnblogs.com/wang_yb/p/9987397.html)
