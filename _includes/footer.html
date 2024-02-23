@@ -24,7 +24,33 @@
   <script src="https://code.jquery.com/jquery-3.2.0.min.js"></script>
   <!-- <script src="https://unpkg.com/leancloud-storage@4.12.2/dist/av-min.js"></script> -->
   <script src="//unpkg.com/leancloud-storage@4.12.2/dist/av-min.js"></script>
-  <script>AV.initialize("{{site.leancloud.app_id}}", "{{site.leancloud.app_key}}");</script>
+  <script>
+    AV.init({
+      appId:"{{site.leancloud.app_id}}",
+      appKey: "{{site.leancloud.app_key}}"
+    });
+    // AV.debug.enable(); // 启用
+
+    // //Test Code
+    // const TestObject = AV.Object.extend("visited_times");
+    // const testObject = new TestObject();
+    // testObject.set("post_title", "post_title");
+    // testObject.set("post_url", "post_url");
+    // testObject.set("visited_times", 1);
+    // testObject.save().then((testObject) => {
+    //   console.log("保存成功。");
+    // });
+
+    // var Counter = AV.Object.extend("visited_times");
+    // var query = new AV.Query(Counter);
+    // query.equalTo("post_title", "post_title");
+    // query.equalTo("post_url", "post_url");
+    // query.find().then((students) => {
+    //   console.log(students)
+    // },(err) => {
+    //   console.log(err)
+    // })
+</script>
   <script>
     
     //新增访问次数
@@ -38,8 +64,7 @@
       console.log(query)
       // 只根据文章的url查询LeanCloud服务器中的数据
       query.equalTo("post_url", url);
-      query.find({
-        success: function(results) {
+      query.find().then((results)=>{
           if (results.length > 0) {//说明LeanCloud中已经记录了这篇文章
             var counter = results[0];
             counter.fetchWhenSave(true);
@@ -77,11 +102,9 @@
               }
             });
           }
-        },
-        error: function(error) {
+      },(error)=>{
           console.log('Error:' + error.code + " " + error.message);
-        }
-      });
+      })
     }
 
     //仅根据url和title查出当前访问次数，不做+1操作
@@ -93,8 +116,7 @@
 
       // 只根据文章的url查询LeanCloud服务器中的数据
       query.equalTo("post_url", url);
-      query.find({
-        success: function(results) {
+      query.find().then((results)=>{
           if (results.length > 0) {//说明LeanCloud中已经记录了这篇文章
             var counter = results[0];
             var $element = $(document.getElementById(url));
@@ -103,12 +125,14 @@
           } else {
             //如果表里没查到记录，那就是异常情况了
             console.log('异常情况，不应该没记录的');
+            $element.find('.leancloud-visitors-count').text("1");
           }
-        },
-        error: function(error) {
+      },(error)=>{
           console.log('Error:' + error.code + " " + error.message);
-        }
-      });
+      })
+      // query.find.then((results)=>{
+      // },(error)=>{
+      // })
     }
 
     //调用API获取IP
@@ -143,14 +167,10 @@
       query.equalTo("post_url", post_url);
 
       console.log(query)
-      query.find({
-        success: function(results) {
-          console.log(results)
+      query.find().then((results) => {
           if (results.length > 0) {
             console.log('该IP已访问过该文章');
-
             var oldVisitor = results[0];
-
             var lastTime = oldVisitor.updatedAt;
             var curTime = new Date();
 
@@ -158,9 +178,7 @@
 
             if(timePassed > 1 * 60 * 1000) {
               console.log('距离该IP上一次访问该文章已超过了1分钟，更新访问记录，并增加访问次数');
-
               addCount(Counter);
-
               oldVisitor.fetchWhenSave(true);
               oldVisitor.save(null, {
                 success: function(oldVisitor) { },
@@ -168,15 +186,10 @@
                   console.log('Failed to save visitor record, with error message: ' + error.message);
                 }
               });
-            } else {
-              console.log('这是该IP 1分钟内重复访问该文章，不更新访问记录，不增加访问次数');
-              showCount(Counter);
             }
           } else {
             console.log('该IP第一次访问该文章，保存新的访问记录，并增加访问次数');
-
             addCount(Counter);
-
             var newVisitor = new Visitor();
             /* Set ACL */
             var acl = new AV.ACL();
@@ -192,16 +205,16 @@
               }
             });
           }
-        },
-        error: function(error) {
+      },(error) => {
           console.log('Error:' + error.code + " " + error.message);
           addCount(Counter);
-        }
-      });
+      })
+      
+      showCount(Counter)
     }
 
     $(function() {
-      if ($('.leancloud_visitors').length > 1) {
+      if ($('.leancloud_visitors').length == 1) {
         // 文章页面，调用判断方法，对符合条件的访问增加访问次数
         getVisitorIpAndJudge();
       } else if ($('.post-link').length > 1){
