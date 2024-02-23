@@ -117,9 +117,9 @@
       // 只根据文章的url查询LeanCloud服务器中的数据
       query.equalTo("post_url", url);
       query.find().then((results)=>{
+          var $element = $(document.getElementById(url));
           if (results.length > 0) {//说明LeanCloud中已经记录了这篇文章
             var counter = results[0];
-            var $element = $(document.getElementById(url));
             var newTimes = counter.get('visited_times');
             $element.find('.leancloud-visitors-count').text(newTimes);
           } else {
